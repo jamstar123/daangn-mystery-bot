@@ -1,0 +1,44 @@
+name: Busan Mystery Cafe Auto Post (2x Daily)
+
+on:
+  schedule:
+    # 매일 오후 6시(09:00 UTC), 밤 10시 30분(13:30 UTC) 하루 2회 자동 발행
+    - cron: '0 9 * * *'
+    - cron: '30 13 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish_mystery:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 3.10 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 부산 괴담·미스터리 원고 1건 자동 발행
+        env:
+          DAANGN_COOKIE: ${{ secrets.DAANGN_COOKIE }}
+          MYSTERY_CAFE_SLUG: ${{ secrets.MYSTERY_CAFE_SLUG }}
+          MYSTERY_BOARD_ID: ${{ secrets.MYSTERY_BOARD_ID || 'free' }}
+        run: |
+          python3 mystery_runner.py --slug "${MYSTERY_CAFE_SLUG}" --board "${MYSTERY_BOARD_ID}"
+
+      - name: 발행 완료된 원고 이동 내역 커밋 및 푸시
+        if: always()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add manuscripts/ logs/ 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "변경 사항 없음"
+          else
+            git commit -m "Auto: 부산 괴담 원고 발행 완료 및 대기열 업데이트"
+            git push
+          fi
