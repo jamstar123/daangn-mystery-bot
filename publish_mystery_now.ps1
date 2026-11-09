@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$Slug,
     [string]$Board = "free",
-    [string]$ManuscriptFile = ""
+    [string]$ManuscriptFile = "",
+    [string]$Prefix = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,10 +26,13 @@ foreach ($pair in ($cookie -split ';')) {
 
 $queueDir = "$baseDir\manuscripts\queue"
 $pubDir = "$baseDir\manuscripts\published"
+New-Item -ItemType Directory -Force -Path $pubDir | Out-Null
+$referencedImages = @()
 if (-not $ManuscriptFile) {
-    $first = Get-ChildItem "$queueDir\*.txt" | Sort-Object Name | Select-Object -First 1
+    $filter = if ($Prefix) { "$Prefix*.txt" } else { "*.txt" }
+    $first = Get-ChildItem "$queueDir\$filter" -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -First 1
     if (-not $first) {
-        Write-Host "[대기열 비어 있음] 발행할 원고가 없습니다."
+        Write-Host "[대기열 비어 있음] 발행할 원고($filter)가 없습니다."
         exit 0
     }
     $ManuscriptFile = $first.FullName
@@ -41,16 +45,40 @@ if (-not $titleLine.StartsWith("제목:")) {
 }
 $title = $titleLine.Substring(3).Trim()
 
+$boardOverride = ""
+foreach ($rawLine in ($lines | Select-Object -Skip 1)) {
+    $t = $rawLine.Trim()
+    if (-not $t -or $t -eq "## 본문") { continue }
+    if ($t.StartsWith("게시판:")) {
+        $boardOverride = $t.Substring(4).Trim()
+        break
+    }
+    break
+}
+$targetBoard = if ($boardOverride) { $boardOverride } else { $Board }
+
 # 카페 페이지에서 게시판 ID 및 최신 액션 ID 조회
 $cafeHtmlResp = Invoke-WebRequest -Uri "https://cafe.daangn.com/$Slug" -WebSession $session -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -UseBasicParsing
 $cafeDecoded = [System.Text.Encoding]::UTF8.GetString($cafeHtmlResp.RawContentStream.ToArray()) -replace '\\"', '"' -replace '\\\\', '\'
 $catPattern = [regex]'\{\s*"id"\s*:\s*(\d+)\s*,\s*"type"\s*:\s*"([^"]+)"\s*,\s*"category"\s*:\s*"([^"]+)"'
 $boards = $catPattern.Matches($cafeDecoded)
 $boardCategoryId = 0
-foreach ($b in $boards) {
-    if ($b.Groups[3].Value -match $Board -or $b.Groups[2].Value -eq "default") {
-        $boardCategoryId = [int]$b.Groups[1].Value
-        break
+if ($targetBoard -match '^\d+$') {
+    $boardCategoryId = [int]$targetBoard
+} else {
+    foreach ($b in $boards) {
+        if ($b.Groups[3].Value -match [regex]::Escape($targetBoard) -or $targetBoard -match [regex]::Escape($b.Groups[3].Value)) {
+            $boardCategoryId = [int]$b.Groups[1].Value
+            break
+        }
+    }
+    if ($boardCategoryId -eq 0) {
+        foreach ($b in $boards) {
+            if ($b.Groups[2].Value -eq "default") {
+                $boardCategoryId = [int]$b.Groups[1].Value
+                break
+            }
+        }
     }
 }
 if ($boardCategoryId -eq 0 -and $boards.Count -gt 0) {
@@ -110,6 +138,7 @@ foreach ($rawLine in ($lines | Select-Object -Skip 1)) {
         } else {
             $imgPath = Join-Path $msDir $imgRef
             $imgBytes = [System.IO.File]::ReadAllBytes($imgPath)
+            $referencedImages += $imgPath
         }
         $upId = Upload-DaangnImage $imgBytes
         $blocks += @{
@@ -174,3 +203,12 @@ if ($slugMatch.Success) {
 }
 
 Write-Output "SUCCESS_URL: $finalUrl"
+
+if ((Split-Path -Parent $ManuscriptFile) -eq $queueDir) {
+    Move-Item -Path $ManuscriptFile -Destination (Join-Path $pubDir (Split-Path -Leaf $ManuscriptFile)) -Force
+    foreach ($rp in $referencedImages) {
+        if (Test-Path $rp) {
+            Move-Item -Path $rp -Destination (Join-Path $pubDir (Split-Path -Leaf $rp)) -Force
+        }
+    }
+}
