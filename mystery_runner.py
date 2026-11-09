@@ -22,14 +22,15 @@ from daangn_cafe import (
 )
 
 
-def run_next_manuscript(slug: str, board: str, queue_dir: Path, pub_dir: Path, log_dir: Path) -> int:
+def run_next_manuscript(slug: str, board: str, queue_dir: Path, pub_dir: Path, log_dir: Path, prefix: str = "") -> int:
     queue_dir.mkdir(parents=True, exist_ok=True)
     pub_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    candidates = sorted(queue_dir.glob("*.txt"))
+    pattern = f"{prefix}*.txt" if prefix else "*.txt"
+    candidates = sorted(queue_dir.glob(pattern))
     if not candidates:
-        print("[대기열 비어 있음] manuscripts/queue 폴더에 발행할 원고가 없습니다.")
+        print(f"[대기열 비어 있음] manuscripts/queue 폴더에 발행할 원고({pattern})가 없습니다.")
         return EXIT_SUCCESS
 
     target_txt = candidates[0]
@@ -73,6 +74,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="부산 괴담·미스터리 카페 전용 자동 발행 봇")
     parser.add_argument("--slug", required=True, help="괴담 카페 slug")
     parser.add_argument("--board", default="free", help="기본 게시판 이름 또는 ID")
+    parser.add_argument("--prefix", default="", help="원고 파일 접두사 필터 (예: photo_, real_, series_)")
     args = parser.parse_args()
 
     try:
@@ -82,6 +84,7 @@ def main() -> int:
             queue_dir=base_dir / "manuscripts" / "queue",
             pub_dir=base_dir / "manuscripts" / "published",
             log_dir=base_dir / "logs",
+            prefix=args.prefix,
         )
     except DaangnCafeError as e:
         print(str(e), file=sys.stderr)
