@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 mystery_runner.py
-부산 괴담·미스터리 카페 전용 자동 발행 워커 (독립 봇)
+괴담·미스터리 카페 전용 자동 발행 워커 (독립 봇)
 - manuscripts/queue/ 폴더의 원고(.txt) 및 매칭된 실제 사진(.jpg/.png 또는 URL)을 순서대로 1건씩 발행합니다.
 - 발행 완료된 원고와 로컬 이미지 파일은 manuscripts/published/ 폴더로 안전하게 이동합니다.
 """
@@ -71,7 +71,7 @@ def main() -> int:
     base_dir = Path(__file__).resolve().parent
     load_env(base_dir / ".env")
 
-    parser = argparse.ArgumentParser(description="부산 괴담·미스터리 카페 전용 자동 발행 봇")
+    parser = argparse.ArgumentParser(description="괴담·미스터리 카페 전용 자동 발행 봇")
     parser.add_argument("--slug", required=True, help="괴담 카페 slug")
     parser.add_argument("--board", default="free", help="기본 게시판 이름 또는 ID")
     parser.add_argument("--prefix", default="", help="원고 파일 접두사 필터 (예: photo_, real_, series_)")
