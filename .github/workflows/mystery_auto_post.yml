@@ -1,4 +1,4 @@
-name: Busan Mystery Cafe Auto Post (4x Daily by Board)
+name: Mystery Cafe Auto Post (4x Daily by Board)
 
 on:
   schedule:
