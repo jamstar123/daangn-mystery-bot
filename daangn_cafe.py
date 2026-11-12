@@ -32,8 +32,8 @@ EXIT_AUTH_EXPIRED = 2       # 쿠키 만료 또는 super_host 권한 없음 -> �
 EXIT_ACTION_ID_CHANGED = 3  # Next-Action ID 불일치/변경 감지 -> 재확인 필요
 EXIT_RATE_LIMIT_FAILED = 4  # 요청 제한 대기 후 재시도 초과
 
-DEFAULT_POST_ACTION_ID = "40ec4883aa4a0be726249db944264360e828b02bb2"
-DEFAULT_IMAGE_ACTION_ID = "40c9d529704d23a3514ffcea26bda581a58a0672ca"
+DEFAULT_POST_ACTION_ID = "402f5a7c2fc9904da9e01dae909ef0f2cd05e52ae9"
+DEFAULT_IMAGE_ACTION_ID = "405f02288844f7079cb0daafe72ecf1e55f48835a3"
 DEFAULT_BASE_URL = "https://cafe.daangn.com"
 
 
@@ -247,29 +247,49 @@ class DaangnCafeClient:
         try:
             url = f"{self.base_url}/{self.slug}/posts/new"
             headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
-            _, _, html = self._request("GET", url, headers=headers, include_cookie=True)
-            w_match = re.search(r'\"([^\"]*static/chunks/[^\"]+)\"[^\]]*WritePageClient', html)
-            if not w_match:
-                return False
-            w_url = w_match.group(1)
-            if not w_url.startswith("http"):
-                w_url = urllib.parse.urljoin(self.base_url, w_url)
+            _, _, raw_html = self._request("GET", url, headers=headers, include_cookie=True)
+            html = raw_html.replace('\\"', '"').replace("\\\\", "\\")
 
-            _, _, w_js = self._request("GET", w_url, include_cookie=False)
-            chunk_matches = re.findall(r'\"([^\"]*static/chunks/[^\"]+\.js)\"', w_js)
+            prefix_m = re.search(r'(https://warp-static\.daangn\.com/[^"\'`\s]+/_next/)', html)
+            asset_prefix = prefix_m.group(1) if prefix_m else f"{self.base_url}/_next/"
+
+            top_chunks = list(dict.fromkeys(re.findall(r'static/chunks/[^"\'`\s]+\.js', html)))
             found = False
-            for chunk_path in chunk_matches:
-                c_url = chunk_path if chunk_path.startswith("http") else urllib.parse.urljoin(w_url, chunk_path)
+
+            def scan_js(js_text: str) -> bool:
+                nonlocal found
+                post_m = re.search(r'createServerReference\)\("(4[a-f0-9]{41})"[^"]*"createPostAction"', js_text) or re.search(r'"(4[a-f0-9]{41})".{0,120}?createPostAction', js_text)
+                img_m = re.search(r'createServerReference\)\("(4[a-f0-9]{41})"[^"]*"getImageUploadUrl"', js_text) or re.search(r'"(4[a-f0-9]{41})".{0,120}?getImageUploadUrl', js_text)
+                if post_m:
+                    self.post_action_id = post_m.group(1)
+                    found = True
+                if img_m:
+                    self.image_action_id = img_m.group(1)
+                    found = True
+                return bool(post_m and img_m)
+
+            visited = set()
+            for c_rel in top_chunks:
+                c_url = urllib.parse.urljoin(asset_prefix, c_rel)
+                if c_url in visited:
+                    continue
+                visited.add(c_url)
                 try:
                     _, _, c_js = self._request("GET", c_url, include_cookie=False)
-                    post_m = re.search(r'\"(4[a-f0-9]{39})\".*?createPostAction', c_js)
-                    img_m = re.search(r'\"(4[a-f0-9]{39})\".*?getImageUploadUrl', c_js)
-                    if post_m:
-                        self.post_action_id = post_m.group(1)
-                        found = True
-                    if img_m:
-                        self.image_action_id = img_m.group(1)
-                        found = True
+                    if scan_js(c_js):
+                        return True
+                    sub_chunks = list(dict.fromkeys(re.findall(r'static/chunks/[^"\'`\s]+\.js', c_js)))
+                    for s_rel in sub_chunks:
+                        s_url = urllib.parse.urljoin(asset_prefix, s_rel)
+                        if s_url in visited:
+                            continue
+                        visited.add(s_url)
+                        try:
+                            _, _, s_js = self._request("GET", s_url, include_cookie=False)
+                            if scan_js(s_js):
+                                return True
+                        except Exception:
+                            continue
                 except Exception:
                     continue
             return found
