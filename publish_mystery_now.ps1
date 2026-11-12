@@ -90,7 +90,7 @@ function Upload-DaangnImage([byte[]]$imgBytes) {
     $imgActionPayload = '[{"contentType":"image/jpeg","width":1080,"height":720}]'
     $imgHeaders = @{
         "Accept" = "text/x-component"
-        "Next-Action" = "40c9d529704d23a3514ffcea26bda581a58a0672ca"
+        "Next-Action" = "405f02288844f7079cb0daafe72ecf1e55f48835a3"
         "Origin" = "https://cafe.daangn.com"
         "Referer" = "https://cafe.daangn.com/$Slug/posts/new"
     }
@@ -175,7 +175,7 @@ $createPayload = "[$innerJson]"
 
 $createHeaders = @{
     "Accept" = "text/x-component"
-    "Next-Action" = "40ec4883aa4a0be726249db944264360e828b02bb2"
+    "Next-Action" = "402f5a7c2fc9904da9e01dae909ef0f2cd05e52ae9"
     "Origin" = "https://cafe.daangn.com"
     "Referer" = "https://cafe.daangn.com/$Slug/posts/new"
 }
